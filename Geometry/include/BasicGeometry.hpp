@@ -35,6 +35,56 @@ namespace geometry {
         Vector3<T> _normal;
     };
 
+
+
+
+    template <typename T>
+    class LineSegment {
+    public:
+        LineSegment(Vector3<T> v0, Vector3<T> v1) {
+            _vertices[0] = v0;
+            _vertices[1] = v1;
+        }
+
+        Vector3<T>* vertices() { return _vertices; }
+        Vector3<T>& vertices(int idx) { return _vertices[idx]; }
+
+
+        /**
+            We're literally following word-for-word what the Wikipedia page for 
+            line plane intersections says.
+
+            https://en.wikipedia.org/wiki/Line%E2%80%93plane_intersection
+        */
+        void IntersectPlane(Plane<T> p, std::vector<Vector3<T>>& intersections) {
+            Vector3<T> n = p.normal();
+            Vector3<T> p0 = p.p();
+            Vector3<T> l0 = _vertices[0];
+            Vector3<T> l = _vertices[1] - _vertices[0];
+            
+            // if line and plane are parallel, then no intersections
+            if (l.dot(n) == 0) {
+                return;
+            }
+
+            // if intersection does not land on segment, skip
+            float d = (p0 - l0).dot(n) / l.dot(n);
+            if (d < 0 || d > 1) {
+                return;
+            }
+
+            // add poi (point of intersection) to list
+            Vector3<T> poi = d * l + l0;
+            intersections.push_back(poi);
+        }
+
+    private:
+        Vector3<T> _vertices[2];
+    }; 
+
+
+
+
     template <typename T>
     class Triangle {
     public:
@@ -55,7 +105,17 @@ namespace geometry {
                 2. You can modify the function input/return type to any format you want.
         */
         std::vector<Vector3<T>> IntersectPlane(Plane<T> p) {
-            /* Implement your code here */
+            std::vector<Vector3<T>> intersections;            
+
+            LineSegment seg1(_vertices[0], _vertices[1]);
+            LineSegment seg2(_vertices[0], _vertices[2]);
+            LineSegment seg3(_vertices[1], _vertices[2]);
+           
+            seg1.IntersectPlane(p, intersections);
+            seg2.IntersectPlane(p, intersections);
+            seg3.IntersectPlane(p, intersections);
+
+            return intersections;
         }
         
     private:
