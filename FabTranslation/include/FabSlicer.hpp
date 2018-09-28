@@ -23,8 +23,10 @@ namespace fab_translation {
         }
 
         /* Main entrance for FabSlicer
-            return contour and infill_edges, which can be directed sent to corresponding visualization function to visualize in MeshLab
-            1. each contour contains a list of point in loop order, each layer can have multiple contours, so the contour is vector<vector<vector<Point>>>.
+            return contour and infill_edges, which can be directed sent to corresponding 
+                visualization function to visualize in MeshLab
+            1. each contour contains a list of point in loop order, each layer can have 
+                multiple contours, so the contour is vector<vector<vector<Point>>>.
             2. infill edges is a edge soup for each layer, thus it's vector<vector<Edge>>
         */
         void RunTranslation(std::vector<std::vector<std::vector<Vector3<T>>>>& contour,
@@ -63,8 +65,10 @@ namespace fab_translation {
                     std::vector<Vector3<T>> intersections = triangle.IntersectPlane(plane);
 
                     /* Implement your code here */
-                    /* What kinds of intersections should be added into intersection edge list? */
-
+                    if (intersections.size() == 2) {
+                        std::pair<Vector3<T>, Vector3<T>> seg(intersections[0], intersections[1]);
+                        intersections_one_plane.push_back(seg);
+                    }
                 }
 
                 intersection_edges.push_back(intersections_one_plane);
@@ -113,8 +117,127 @@ namespace fab_translation {
             /* Implement your code here */
             /* Input is a edge soup, your task is to generate the loop by linking those edges one by one.
                Thinking about how to find two edge sharing a same end point. set a threshold? or a more clever way? */
+            
+            // Iterate over every contour's list of intersectione edges
+            for (auto contour_inter_iter = intersection_edges.begin(); 
+                contour_inter_iter != intersection_edges.end(); 
+                contour_inter_iter++) {
+                
+                // a single z-plane / contour's intersection edges
+                std::vector<std::pair<Vector3<T>, Vector3<T>>> contour_inter_edges = *contour_inter_iter;
+                
+                // a single z-plane's [possibly multiple] loop(s)
+                std::vector<std::vector<Vector3<T>>> contour_loops;
+
+                // add the loops to the above vector
+                CreateLoops(contour_inter_eges, contour_loops);
+
+                // add the z-plane's loop(s) to contours
+                contours.push_back(contour_loops);
+            }
+
 
         }
+
+
+        /**
+            Given a single z-plane's list of intersection edges, there might be multiple 
+            contour loops (imagine the sequence of pillars in Killian court, each of which
+            would produce its own separate contour loop.) Add these contour loops to the
+            contour_loops passed in as a parameter.
+        */
+        void CreateLoops(
+            std::vector<std::pair<Vector3<T>, Vector3<T>>>& intersection_edges,
+            std::vector<std::vector<Vector3<T>>>& contour_loops) {
+
+            // mark edges visited when we get to them...            
+            std::vector<bool> visited(intersection_edges.size());
+
+            // loop through all unvisited edges
+            for (int i=0; i<intersection_edges.size(); i++) {
+                if (visited[i]) {       
+                    continue;
+                }
+                
+                // create a single loop
+                std::vector<Vector3<T>> single_loop;
+                CreateSingleLoop(intersection_edges, visited, i, single_loop);
+
+                // add single loop to all contour_loops
+                contour_loops.push_back(single_loop);
+            }
+            
+        }
+
+
+        void CreateSingleLoop(
+            std::vector<std::pair<Vector3<T>, Vector3<T>>>& intersection_edges,
+            std::vector<bool>& visited,
+            int idx,
+            std::vector<Vector3<T>>& loop) {
+
+            // indicator variable to say whether our current vertex is the 
+            // first or second element of our current edge (a C++ pair)
+            bool first = true;
+
+            while ( ! visited[idx] ) {
+                visited[idx] = true;        // mark edge as visited
+            
+                // set current and next vertices by looking at current edge
+                std::pair<Vector3<T>, Vector3<T>> edge = intersection_edges[idx];
+                Vector3<T> v_curr = (first ? edge.first : edge.second);
+                Vector3<T> v_next = (first ? edge.second : edge.first);
+
+                // add current vertex to loop
+                loop.push_back(v_curr);
+
+                // look for unvisited edge that has "v_next" as a endpoint
+                idx = GetUnvisitedEdgeWithEndpoint(intersection_edges, visited, v_next);
+                
+                // check to see if our current index is now the first or second
+                // element of our NEW current edge
+                if ( (intersection_edges[idx].first - v_next).norm() < EPS ) { first = true; }
+                else { first = false; }
+            }
+            
+            // complete the loop
+            if (loop.size() > 0) {
+                // get last edge
+                std::pair<Vector3<T>, Vector3<T>> lastEdge = intersection_edges[idx];
+
+                // add the endpoint that was not the last vertex
+                Vector3<T> lastPoint = (first ? lastEdge.second : lastEdge.first);
+                loop.push_back(lastPoint);
+            }    
+        }
+
+        /**
+            Searches through all unvisited edges to check if any have the
+            given endpoint. The check is done by seeing if the L2 norm is
+            less than some epsilon value
+        */
+        int GetUnvisitedEdgeWithEndpoint(
+            std::vector<std::pair<Vector3<T>, Vector3<T>>>& intersection_edges,
+            std::vector<bool>& visited,
+            Vector3<T> endpoint) {
+                
+            for (int i=0; i<intersection_edges.size(); i++) {
+                if (visited[i]) {
+                    continue;
+                }
+                Vector3<T> vA = intersection_edges[i].first;
+                Vector3<T> vB = intersection_edges[i].second;
+               
+                if ((vA - endpoint).norm() < EPS || (vB - endpoint).norm() < EPS) {
+                    return i;
+                }
+            }
+            
+            // no unvisited edges with the given endpoint found...
+            // actually this function should never reach here.
+            return -1;
+        }
+ 
 
         /* Generate infill pattern
            Goal: Given the contours at each layer, this function aims to infill the internal part by a pattern which
@@ -242,6 +365,9 @@ namespace fab_translation {
         }
 
     private:
+
+        float EPS = 1e-4;
+
         mesh::TriMesh<T> _tri_mesh;
 
         /* Variables for slicing */
