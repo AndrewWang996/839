@@ -4,6 +4,8 @@
 #include "IntervalTree.hpp"
 #include "cinolib/meshes/meshes.h"
 #include <ctime>
+#include <math.h>
+#include <algorithm>
 
 namespace fab_translation {
     template <typename T>
@@ -34,8 +36,8 @@ namespace fab_translation {
 
             std::vector<std::vector<std::pair<Vector3<T>, Vector3<T>>>> intersection_edges;
 
-            Slicing_bruteforce(_tri_mesh, intersection_edges);
-            // Slicing_accelerated(_tri_mesh, intersection_edges);
+            // Slicing_bruteforce(_tri_mesh, intersection_edges);
+            Slicing_accelerated(_tri_mesh, intersection_edges);
 
             CreateContour(_tri_mesh, intersection_edges, contour);
 
@@ -74,6 +76,56 @@ namespace fab_translation {
             }
         }
 
+
+        /* converts a z value into a bucket by dividing by the z increment size */
+        int To_Z_Bucket(T z) {
+            return (int)round(z / _dx);
+        }
+
+
+        /*
+            Preprocessing method to get the z buffer in the form of 
+            map[ bucket ][ list of triangles ]
+        */
+        std::map<int, std::vector<geometry::Triangle<T>>> Get_Z_Buffer(mesh::TriMesh<T>& tri_mesh) {
+            std::vector<Eigen::Vector3i>& elements = tri_mesh.elements();
+            std::vector<Vector3<T>>& vertices = tri_mesh.vertices();
+
+            std::map<int, std::vector<geometry::Triangle<T>>> zBuff;
+
+            // initialize the relevant buckets as empty vectors
+            for (T h = _bottom; h <= _top; h += _dx) {
+                int bucket = To_Z_Bucket(h);
+                std::vector<geometry::Triangle<T>> empty;
+                zBuff[bucket] = empty;
+            }
+ 
+            for (auto iter=elements.begin(); iter!=elements.end(); ++iter) {
+                Eigen::Vector3i elem = *iter;
+                Vector3<T> A = vertices[elem(0)];
+                Vector3<T> B = vertices[elem(1)];
+                Vector3<T> C = vertices[elem(2)];
+
+                geometry::Triangle<T> triangle(A,B,C);
+
+                // determine unique set of buckets to insert triangle into
+                int bucketA = To_Z_Bucket(A[2]);
+                int bucketB = To_Z_Bucket(B[2]);
+                int bucketC = To_Z_Bucket(C[2]);
+
+                int minBucket = std::min(std::min(bucketA, bucketB), bucketC);
+                int maxBucket = std::max(std::max(bucketA, bucketB), bucketC);
+
+                // insert into all buckets that contain part of the triangle
+                for (int bucket = minBucket; bucket <= maxBucket; bucket++) {
+                    zBuff[bucket].push_back(triangle);
+                }
+            
+            }
+
+            return zBuff;
+        }
+
         void Slicing_accelerated(mesh::TriMesh<T>& tri_mesh,
             std::vector<std::vector<std::pair<Vector3<T>, Vector3<T>>>> &intersection_edges) {
             
@@ -83,23 +135,31 @@ namespace fab_translation {
 
             intersection_edges.clear();
 
+            // Preprocess by storing the triangles in elements into Z-buckets
+            std::map<int, std::vector<geometry::Triangle<T>>> zBuff = Get_Z_Buffer(tri_mesh);
+
             for (T h = _bottom; h <= _top; h += _dx) {
-
-                std::vector<data_structure::IntervalEntry<T>> candidates;
-                /* Implement your code here */
-                /* Retrieve candidate triangle list */
-
                 std::vector<std::pair<Vector3<T>, Vector3<T>>> intersections_one_plane;
                 intersections_one_plane.clear();
 
                 geometry::Plane<T> plane(Vector3<T>(0, 0, h), Vector3<T>(0, 0, 1));
-                for (int ii = 0;ii < candidates.size();++ii) {
-                    int i = candidates[ii].id;
-                    geometry::Triangle<T> triangle(vertices[elements[i](0)], vertices[elements[i](1)], vertices[elements[i](2)]);
+
+                // convert the current height h to a z bucket.
+                int bucket = To_Z_Bucket(h); 
+
+                // grab the triangles that fall into this bucket.
+                std::vector<geometry::Triangle<T>> candidate_triangles = zBuff[bucket]; 
+
+                // loop over all triangles, checking to see which ones intersect the plane                
+                for (auto iter=candidate_triangles.begin(); iter!=candidate_triangles.end(); ++iter) {
+                    geometry::Triangle<T> triangle = *iter;
                     std::vector<Vector3<T>> intersections = triangle.IntersectPlane(plane);
                     
-                    /* Implement your code here */
-                    /* What kinds of intersections should be added into intersection edge list? */
+                    // add any triangles with 2 intersections with the plane
+                    if (intersections.size() == 2) {
+                        std::pair<Vector3<T>, Vector3<T>> seg(intersections[0], intersections[1]);
+                        intersections_one_plane.push_back(seg);
+                    }
                 }
 
                 intersection_edges.push_back(intersections_one_plane);
