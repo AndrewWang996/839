@@ -63,13 +63,13 @@ namespace geometry {
             Vector3<T> l = _vertices[1] - _vertices[0];
             
             // if line and plane are parallel, then no intersections
-            if (l.dot(n) == 0) {
+            if ( abs(l.dot(n)) < EPS) {
                 return;
             }
 
             // if intersection does not land on segment, skip
             float d = (p0 - l0).dot(n) / l.dot(n);
-            if (d < 0 || d > 1) {
+            if (d < -EPS || d > 1+EPS) {
                 return;
             }
 
@@ -79,6 +79,8 @@ namespace geometry {
         }
 
     private:
+        float EPS = 1e-6;
+
         Vector3<T> _vertices[2];
     }; 
 
@@ -115,10 +117,23 @@ namespace geometry {
             seg2.IntersectPlane(p, intersections);
             seg3.IntersectPlane(p, intersections);
 
+            RemoveDuplicates(intersections);
             return intersections;
+        }
+
+        void RemoveDuplicates(std::vector<Vector3<T>>& points) {
+            for (int i=points.size() - 1; i>=0; i--) {
+                for (int j=0; j<i; j++) {
+                    if ( (points[i] - points[j]).norm() < EPS ) {
+                        points.erase(points.begin() + i);
+                        break;
+                    }
+                }
+            }
         }
         
     private:
+        float EPS = 1e-6;
         Vector3<T> _vertices[3];
     };
 }

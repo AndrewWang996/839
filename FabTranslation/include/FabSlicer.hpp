@@ -35,7 +35,6 @@ namespace fab_translation {
             std::vector<std::vector<std::pair<Vector3<T>, Vector3<T>>>> intersection_edges;
 
             Slicing_bruteforce(_tri_mesh, intersection_edges);
-
             // Slicing_accelerated(_tri_mesh, intersection_edges);
 
             CreateContour(_tri_mesh, intersection_edges, contour);
@@ -125,7 +124,7 @@ namespace fab_translation {
                 
                 // a single z-plane / contour's intersection edges
                 std::vector<std::pair<Vector3<T>, Vector3<T>>> contour_inter_edges = *contour_inter_iter;
-                
+
                 // a single z-plane's [possibly multiple] loop(s)
                 std::vector<std::vector<Vector3<T>>> contour_loops;
 
@@ -192,21 +191,21 @@ namespace fab_translation {
                 loop.push_back(v_curr);
 
                 // look for unvisited edge that has "v_next" as a endpoint
-                idx = GetUnvisitedEdgeWithEndpoint(intersection_edges, visited, v_next);
+                idx = GetUnvisitedEdgeWithEndpoint(intersection_edges, idx, !first);
                 
                 // check to see if our current index is now the first or second
                 // element of our NEW current edge
                 if ( (intersection_edges[idx].first - v_next).norm() < EPS ) { first = true; }
                 else { first = false; }
             }
-            
+
             // complete the loop
             if (loop.size() > 0) {
                 // get last edge
                 std::pair<Vector3<T>, Vector3<T>> lastEdge = intersection_edges[idx];
 
                 // add the endpoint that was not the last vertex
-                Vector3<T> lastPoint = (first ? lastEdge.second : lastEdge.first);
+                Vector3<T> lastPoint = (first ? lastEdge.first : lastEdge.second);
                 loop.push_back(lastPoint);
             }    
         }
@@ -218,11 +217,14 @@ namespace fab_translation {
         */
         int GetUnvisitedEdgeWithEndpoint(
             std::vector<std::pair<Vector3<T>, Vector3<T>>>& intersection_edges,
-            std::vector<bool>& visited,
-            Vector3<T> endpoint) {
-                
+            int idx,        // index of the current edge 
+            bool first) {   // which endpoint of the current edge
+               
+            std::pair<Vector3<T>, Vector3<T>> edge = intersection_edges[idx];
+            Vector3<T> endpoint = (first ? edge.first : edge.second);
+ 
             for (int i=0; i<intersection_edges.size(); i++) {
-                if (visited[i]) {
+                if (i == idx) {
                     continue;
                 }
                 Vector3<T> vA = intersection_edges[i].first;
@@ -232,7 +234,9 @@ namespace fab_translation {
                     return i;
                 }
             }
-            
+           
+
+            printf("WHAT THE FUCKKKK!!!\n");
             // no unvisited edges with the given endpoint found...
             // actually this function should never reach here.
             return -1;
@@ -366,7 +370,7 @@ namespace fab_translation {
 
     private:
 
-        float EPS = 1e-4;
+        float EPS = 1e-6;
 
         mesh::TriMesh<T> _tri_mesh;
 
