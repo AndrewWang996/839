@@ -107,9 +107,9 @@ namespace geometry {
         std::vector<Vector3<T>> IntersectPlane(Plane<T> p) {
             std::vector<Vector3<T>> intersections;            
 
-            LineSegment seg1(_vertices[0], _vertices[1]);
-            LineSegment seg2(_vertices[0], _vertices[2]);
-            LineSegment seg3(_vertices[1], _vertices[2]);
+            LineSegment<T> seg1(_vertices[0], _vertices[1]);
+            LineSegment<T> seg2(_vertices[0], _vertices[2]);
+            LineSegment<T> seg3(_vertices[1], _vertices[2]);
            
             seg1.IntersectPlane(p, intersections);
             seg2.IntersectPlane(p, intersections);

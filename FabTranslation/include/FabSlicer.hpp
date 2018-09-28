@@ -130,7 +130,7 @@ namespace fab_translation {
                 std::vector<std::vector<Vector3<T>>> contour_loops;
 
                 // add the loops to the above vector
-                CreateLoops(contour_inter_eges, contour_loops);
+                CreateLoops(contour_inter_edges, contour_loops);
 
                 // add the z-plane's loop(s) to contours
                 contours.push_back(contour_loops);
