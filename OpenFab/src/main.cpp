@@ -15,7 +15,7 @@ int main() {
     // load a stl file and convert to a connected mesh (obj)
     // mesh::TriMesh<double> tri_mesh(std::string(PROJECT_SOURCE_DIR) + "/data/cube.stl", 1);
     mesh::TriMesh<double> tri_mesh(std::string(PROJECT_SOURCE_DIR) + "/data/bunny_watertight.stl", 0.01);
-    mesh::TriMesh<double> tri_mesh(std::string(PROJECT_SOURCE_DIR) + "/data/dragon.stl", 0.2);
+    // mesh::TriMesh<double> tri_mesh(std::string(PROJECT_SOURCE_DIR) + "/data/dragon.stl", 0.2);
     
 
     // you can visualize your mesh as an obj file to check if it's loaded correctly
@@ -23,6 +23,7 @@ int main() {
 
     // create a FabSlicer instance
     fab_translation::FabSlicer<double> fab(tri_mesh, 0.0, 2.0, 0.03, 0.05);
+    // fab_translation::FabSlicer<double> fab(tri_mesh, 0.0, 2.0, 0.03, 0.1);
 
     std::vector<std::vector<std::vector<Eigen::Vector3d>>> contour;
     std::vector<std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>>> infill_edges;

@@ -318,13 +318,191 @@ namespace fab_translation {
                 infill_edges_one_layer.clear();
 
                 /* Implement your code here */
-                /* 1. find all intersections between contours and your infill pattern 
-                2. infill internal space with desired pattern */
+                // 1. find all intersections between contours and your infill pattern 
+                // 2. infill internal space with desired pattern
+                // 
+                // We're going to use crosshatch patterns...
+
+                std::vector<std::vector<Vector3<T>>> single_contours = contours[i];
+                
+                for (auto iter=single_contours.begin(); iter!=single_contours.end(); ++iter) {
+                    CrosshatchInfill(*iter, infill_edges_one_layer);
+                }
 
                 infill_edges.push_back(infill_edges_one_layer);
             }
         }  
 
+
+        int To_Infill_Bucket(T f) {
+            return (int)round(f / _infill_dx);
+        }
+
+        void Initialize_Crosshatch_Intersections(
+            std::vector<Vector3<T>>& loop,
+            std::map<int, std::vector<float>>& xIntersections,
+            std::map<int, std::vector<float>>& yIntersections) {
+
+            // Initialize xIntersections, yIntersections with empty vectors
+            float minX = 1e10;
+            float maxX = -1e10;
+            float minY = 1e10;
+            float maxY = -1e10;
+            for (int i=0; i<loop.size(); i++) {
+                Vector3<T> v = loop[i];
+                if (v(0) < minX) minX = v(0);
+                if (v(0) > maxX) maxX = v(0);
+                if (v(1) < minY) minY = v(1);
+                if (v(1) > maxY) maxY = v(1);
+            }
+
+            for (int x=To_Infill_Bucket(minX); x<=To_Infill_Bucket(maxX); ++x) {
+                std::vector<float> empty;
+                xIntersections[x] = empty;
+            }
+            for (int y=To_Infill_Bucket(minY); y<=To_Infill_Bucket(maxY); ++y) {
+                std::vector<float> empty;
+                xIntersections[y] = empty;
+            }
+        }
+        void Intersect_Edge_Vertical(
+            Vector3<T> vA, 
+            Vector3<T> vB, 
+            float x,
+            std::vector<float>& intersections) {
+            
+            // check special case when line segment is vertical
+            if (abs(vA(0) - vB(0)) < EPS) return;
+
+            // check to see if they intersect
+            if (x < vA(0) && x < vB(0)) return;
+            if (x > vA(0) && x > vB(0)) return;
+
+            T slope = (vB(1) - vA(1)) / (vB(0) - vA(0));
+            T y = vA(1) + slope * (x - vA(0));
+            intersections.push_back((float)y);    
+        }
+        void Intersect_Edge_Horizontal(
+            Vector3<T> vA, 
+            Vector3<T> vB, 
+            float y,
+            std::vector<float>& intersections) {
+            
+            // check special case when line segment is horizontal
+            if (abs(vA(1) - vB(1)) < EPS) return;
+
+            // check to see if they intersect
+            if (y < vA(1) && y < vB(1)) return;
+            if (y > vA(1) && y > vB(1)) return;
+            
+            T slope_inv = (vB(0) - vA(0)) / (vB(1) - vA(1));
+            T x = vA(0) + slope_inv * (y - vA(1));
+            intersections.push_back((float)x);    
+        }
+
+        /**
+            Sort each list of intersections from least to greatest.
+        */
+        void Sort_Crosshatch_Intersections(
+            std::map<int, std::vector<float>>& xIntersections,
+            std::map<int, std::vector<float>>& yIntersections) {
+        
+            for (auto iter=xIntersections.begin(); iter!=xIntersections.end(); ++iter) {
+                std::vector<float> vals = (iter->second);
+                std::sort(vals.begin(), vals.end()); // TODO: Confirm that this works...
+            }
+            for (auto iter=yIntersections.begin(); iter!=yIntersections.end(); ++iter) {
+                std::vector<float> vals = (iter->second);
+                std::sort(vals.begin(), vals.end()); // TODO: Confirm that this works...
+            }
+        }
+
+        
+           
+
+
+        /**
+            This creates crosshatch infills for a single loop. 
+            
+            Step 1: Creates horizontal hatches through y := constant
+            Step 2: Creates vertical hatches through x := constant
+        */
+        void CrosshatchInfill(std::vector<Vector3<T>>& loop,
+            std::vector<std::pair<Vector3<T>, Vector3<T>>>& infill_edges) {
+
+            // check special case when loop is empty
+            if (loop.size() == 0) {
+                return;
+            }
+
+            std::map<int, std::vector<float>> xIntersections;
+            std::map<int, std::vector<float>> yIntersections;
+            Initialize_Crosshatch_Intersections(loop, xIntersections, yIntersections);
+            
+            // Get actual intersections, both x and y.
+            // Then add them to their corresponding vectors.
+            Vector3<T> vA, vB;
+            for (int i=0; i+1 < loop.size(); ++i) {
+                vA = loop[i];
+                vB = loop[i+1];
+                
+                // Find minimum and maximum x and y values
+                float yMin = std::min(vA(1), vB(1));
+                float yMax = std::max(vA(1), vB(1));
+                float xMin = std::min(vA(0), vB(0));
+                float xMax = std::max(vA(0), vB(0));
+                
+                // Add crosshatch intersections to corresponding vectors
+                for (int x = To_Infill_Bucket(xMin); x <= To_Infill_Bucket(xMax); ++x) {
+                    Intersect_Edge_Vertical(vA, vB, x * _infill_dx, xIntersections[x]);
+                }
+                for (int y = To_Infill_Bucket(yMin); y<= To_Infill_Bucket(yMax); ++y) {
+                    Intersect_Edge_Horizontal(vA, vB, y * _infill_dx, yIntersections[y]);
+                }
+            }
+
+            // Sort all the intersections
+            Sort_Crosshatch_Intersections(xIntersections, yIntersections);
+
+            // Loop through all intersections and add each pair to the infill edges
+            float z = loop[0](2);
+            Intersections_To_Infill_Edges(xIntersections, yIntersections, infill_edges, z);
+        }
+
+        /**
+            Convert sorted lists of intersections to infill edges 
+            according to the following rules:
+            
+            (x_i, y_2j) <-> (x_i, y_2j+1)
+            (x_2i, y_j) <-> (x_2i+1, y_j)
+        */
+        void Intersections_To_Infill_Edges(
+            std::map<int, std::vector<float>>& xIntersections,
+            std::map<int, std::vector<float>>& yIntersections,
+            std::vector<std::pair<Vector3<T>, Vector3<T>>>& infill_edges,
+            float z) {
+
+            for (auto iter=xIntersections.begin(); iter!=xIntersections.end(); ++iter) {
+                float x = _infill_dx * (iter->first);
+                std::vector<float> yValues = (iter->second);
+                for (int i=0; i<yValues.size(); i+=2) {
+                    Vector3<T> vA(x, yValues[i], z);
+                    Vector3<T> vB(x, yValues[i+1], z);
+                    infill_edges.push_back(std::make_pair(vA, vB));
+                }
+            }
+
+            for (auto iter=yIntersections.begin(); iter!=yIntersections.end(); ++iter) {
+                float y = _infill_dx * (iter->first);
+                std::vector<float> xValues = (iter->second);
+                for (int i=0; i<xValues.size(); i+=2) {
+                    Vector3<T> vA(xValues[i], y, z);
+                    Vector3<T> vB(xValues[i+1], y, z);
+                    infill_edges.push_back(std::make_pair(vA, vB));
+                }
+            }
+        }
+    
         /* Point cloud visualization for each layer's slicing
             file_name: output .ply filename (should be with .ply extension) 
             point_density: the smaller, the denser 
@@ -446,3 +624,16 @@ namespace fab_translation {
         data_structure::IntervalTree<T> _interval_tree;
     };
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
