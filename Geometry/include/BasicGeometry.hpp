@@ -6,6 +6,21 @@ namespace geometry {
     template <typename T>
     using Vector3 = Eigen::Matrix<T, 3, 1>;
 
+    float EPS = 1e-6;
+    
+    // namespace functions
+    template <typename T>
+    void RemoveDuplicates(std::vector<Vector3<T>>& points) {
+        for (int i=points.size() - 1; i>=0; i--) {
+            for (int j=0; j<i; j++) {
+                if ( (points[i] - points[j]).norm() < EPS ) {
+                    points.erase(points.begin() + i);
+                    break;
+                }
+            }
+        }
+    }
+
     // the plane is represented by (x - _p) /dot _normal = 0
     template <typename T>
     class Plane {
@@ -94,20 +109,58 @@ namespace geometry {
             _vertices[0] = v0;
             _vertices[1] = v1;
             _vertices[2] = v2;
+            _normal = (v2 - v0).cross(v1 - v0).normalized(); 
+            _area = (v2 - v0).cross(v1 - v0).norm() / 2.0;
         }
 
         Vector3<T>* vertices() { return _vertices; }
         Vector3<T>& vertices(int idx) { return _vertices[idx]; }
+
+
+        // check sums of areas of 3 components == area of triangle
+        bool ContainsPoint(Vector3<T>& point) const {
+            Vector3<T> subarea1 = (point - _vertices[0]).cross(point - _vertices[2]);
+            Vector3<T> subarea2 = (point - _vertices[2]).cross(point - _vertices[1]);
+            Vector3<T> subarea3 = (point - _vertices[1]).cross(point - _vertices[0]);
+            Vector3<T> area = (_vertices[2] - _vertices[0]).cross(_vertices[1] - _vertices[0]);
+            
+            T diffNorm = ((subarea1 + subarea2 + subarea3) - area).norm();
+            return diffNorm < EPS;
+        }
 
         // Assignment 2: implement ray-triangle intersection.
         // The ray is defined as r(t) = origin + t * dir.
         // You should return a scalar t such that r(t) is the intersection point. Which value
         // to return for the case of no intersections is up to you. You can also change the
         // signature of this function as you see fit.
-        const T IntersectRay(const Vector3<T>& origin, const Vector3<T>& dir) const {
+        // const T IntersectRay(const Vector3<T>& origin, const Vector3<T>& dir) const {
+        void IntersectRay(const Vector3<T>& origin, const Vector3<T>& dir, std::vector<Vector3<T>>& intersections) const {
             /* Assignment 2. */
-            /* Implement your code here */
-            return 0;
+            Plane<T> plane(_vertices[0], _normal);
+
+            Vector3<T> n = _normal;
+            Vector3<T> p0 = _vertices[0];
+            Vector3<T> l0 = origin;
+            Vector3<T> l = dir;
+            
+            // if line and plane are parallel, then no intersections
+            if ( abs(l.dot(n)) < EPS) {
+                return;
+            }
+
+            // get poi (point of intersection)
+            float d = (p0 - l0).dot(n) / l.dot(n);
+            Vector3<T> poi = d * l + l0;
+
+            // test to see if poi is on ray
+            if (d < 0) {
+                return;
+            }
+
+            // test to see if intersection is contained in the triangle
+            if (ContainsPoint(poi)) {
+                intersections.push_back(poi);
+            }
         }
         
         /* Implement triangle plane intersection.
@@ -128,23 +181,18 @@ namespace geometry {
             seg2.IntersectPlane(p, intersections);
             seg3.IntersectPlane(p, intersections);
 
-            RemoveDuplicates(intersections);
+            RemoveDuplicates<T>(intersections);
             return intersections;
         }
 
-        void RemoveDuplicates(std::vector<Vector3<T>>& points) {
-            for (int i=points.size() - 1; i>=0; i--) {
-                for (int j=0; j<i; j++) {
-                    if ( (points[i] - points[j]).norm() < EPS ) {
-                        points.erase(points.begin() + i);
-                        break;
-                    }
-                }
-            }
-        }
 
     private:
         float EPS = 1e-6;
         Vector3<T> _vertices[3];
+        Vector3<T> _normal;
+        T _area;
     };
+
+
+
 }

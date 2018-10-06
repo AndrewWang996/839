@@ -58,10 +58,48 @@ namespace mesh {
             /* Implement your code here. */
             // Fill the _voxels array with the correct flag.
             const int nx = _nvoxel[0], ny = _nvoxel[1], nz = _nvoxel[2];
-            for (int i = 0; i < nx; ++i)
-                for (int j = 0; j < ny; ++j)
-                    for (int k = 0; k < nz; ++k)
-                        _voxels[i][j][k] = false;
+            
+            std::vector<Vector3<T>> intersections;
+            for (int i = 0; i < nx; ++i) {
+                printf("Doing x voxel #%i out of %i\n", i, nx);
+                for (int j = 0; j < ny; ++j) {
+                    printf("Doing y voxel #%i out of %i\n", j, nx);
+                    for (int k = 0; k < nz; ++k) {
+                        printf("Doing z voxel #%i out of %i\n", k, nx);
+                        intersections.clear();
+
+                        // Determine voxel center
+                        Vector3<T> center(
+                            _pmin[0] + _dx * (i + 0.5),
+                            _pmin[1] + _dx * (j + 0.5),
+                            _pmin[2] + _dx * (k + 0.5)
+                        );
+
+                        // Specify direction of ray
+                        Vector3<T> dir(1,1,1);
+
+                        // Send an arbitrary ray outward, intersecting w/ all triangles in mesh
+                        for (auto iter=_triangles.begin(); iter!=_triangles.end(); ++iter) {
+                            std::vector<Vector3<T>> vertices = *iter;
+                            geometry::Triangle<T> triangle(
+                                vertices[0],
+                                vertices[1],
+                                vertices[2]
+                            );
+
+                            // gather intersections of ray with triangles in mesh
+                            triangle.IntersectRay(center, dir, intersections);
+                        }
+                        
+                        // Remove duplicate intersections to account for strange cases
+                        // where intersections lie inbetween multiple triangles.
+                        geometry::RemoveDuplicates<T>(intersections);                        
+
+                        // voxel is filled iff number of intersections is odd
+                        _voxels[i][j][k] = (intersections.size() % 2 == 1);
+                    }
+                }
+            }
         }
 
         void AdvancedVoxelization() {
