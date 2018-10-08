@@ -6,17 +6,16 @@ namespace geometry {
     template <typename T>
     using Vector3 = Eigen::Matrix<T, 3, 1>;
 
-    float EPS = 1e-5;
+    float EPS = 1e-6;
     
     // namespace function RemoveDuplicates
     // modifies the passed in argument points
     // to remove any duplicate points
-    // TODO: Make this faster?
     template <typename T>
     void RemoveDuplicates(std::vector<Vector3<T>>& points) {
         for (int i=points.size() - 1; i>=0; i--) {
             for (int j=0; j<i; j++) {
-                if ( (points[i] - points[j]).norm() < 2 * EPS ) {
+                if ( (points[i] - points[j]).norm() < EPS ) {
                     points.erase(points.begin() + i);
                     break;
                 }
@@ -128,26 +127,23 @@ namespace geometry {
             _vertices[1] = v1;
             _vertices[2] = v2;
             _normal = (v2 - v0).cross(v1 - v0).normalized(); 
-            _area = (v2 - v0).cross(v1 - v0).norm() / 2.0;
         }
 
         Vector3<T>* vertices() { return _vertices; }
         Vector3<T>& vertices(int idx) { return _vertices[idx]; }
 
-
+        // Precondition: point already lies on plane of triangle
         // check sums of areas of 3 components == area of triangle
         bool ContainsPoint(Vector3<T>& point) {
-            if (abs( (point - vertices(0)).dot(_normal) ) > geometry::EPS) {
-                return false;
-            }
-
-            T subarea1 = (point - vertices(0)).cross(point - vertices(2)).norm();
-            T subarea2 = (point - vertices(2)).cross(point - vertices(1)).norm();
-            T subarea3 = (point - vertices(1)).cross(point - vertices(0)).norm();
-            T area = (vertices(2) - vertices(0)).cross(vertices(1) - vertices(0)).norm();
+            Vector3<T> a1 = (point - vertices(0)).cross(point - vertices(2));
+            Vector3<T> a2 = (point - vertices(2)).cross(point - vertices(1));
+            Vector3<T> a3 = (point - vertices(1)).cross(point - vertices(0));
             
-            T diffNorm = abs((subarea1 + subarea2 + subarea3) - area);
-            return diffNorm < geometry::EPS;
+            bool b1 = (a1.dot(a2) > 0);
+            bool b2 = (a1.dot(a3) > 0);
+            bool b3 = (a2.dot(a3) > 0);
+
+            return (b1 == b2 && b2 == b3);
         }
 
         // Assignment 2: implement ray-triangle intersection.
@@ -209,7 +205,6 @@ namespace geometry {
     private:
         Vector3<T> _vertices[3];
         Vector3<T> _normal;
-        T _area;
     };
 
 

@@ -160,23 +160,28 @@ namespace mesh {
 
             // loop over every triangle
             for (int ti=0; ti<_triangles.size(); ti++) {
+                // print out progress
                 if ((float)ti / _triangles.size() > inc) {
                     printf("%i/%lu\n", ti, _triangles.size());
                     inc += 0.1;
                 }
+
+                // Instantiate triangle
                 std::vector<Vector3<T>> verts = _triangles[ti];
                 geometry::Triangle<T> triangle(verts[0], verts[1], verts[2]);
 
                 // Get bounds of triangle to easily project it onto any
                 // axis plane (eg. xy-plane)
-                Vector3<T> tmin, tmax;
+                T inf = (1 << 30);
+                Vector3<T> tmin(inf, inf, inf);
+                Vector3<T> tmax(-inf, -inf, -inf);
                 GetTriangleBounds(triangle, tmin, tmax);
-
                 int xmin = (int)floor( (tmin[0] - _pmin[0]) / _dx - 0.5);
                 int xmax = (int)ceil( (tmax[0] - _pmin[0]) / _dx + 0.5);
                 int ymin = (int)floor( (tmin[1] - _pmin[1]) / _dx - 0.5);
                 int ymax = (int)ceil( (tmax[1] - _pmin[1]) / _dx + 0.5);
 
+                // loop over projected area
                 for (int i = xmin; i <= xmax; ++i) {
                     for (int j = ymin; j <= ymax; ++j) {
                         // Determine voxel center
@@ -208,10 +213,28 @@ namespace mesh {
             /* Implement your code here. */
             // Fill the _voxels array with the correct flag.
             const int nx = _nvoxel[0], ny = _nvoxel[1], nz = _nvoxel[2];
-            for (int i = 0; i < nx; ++i)
-                for (int j = 0; j < ny; ++j)
-                    for (int k = 0; k < nz; ++k)
-                        _voxels[i][j][k] = false;
+        
+
+            // 11 is suggested number of iterations by the pset
+            for (int k=0; k<11; k++) {
+
+                // generate a random vector direction
+                Vector3<T> vec = Vector3<T>::Random().normalized();
+
+
+                // loop through all triangles
+                for (auto iter=_triangles.begin(); iter!=_triangles.end(); ++iter) {
+                    std::vector<Vector3<T>> verts = *iter;
+                    geometry::Triangle<T> triangle(verts[0], verts[1], verts[2]);
+
+                    
+                }
+
+
+            }        
+
+
+
         }
 
         void WriteVoxelToMesh(const std::string& stl_file_name) const {
