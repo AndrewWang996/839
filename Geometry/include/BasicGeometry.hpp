@@ -1,25 +1,45 @@
 #pragma once
 #include <Eigen/Dense>
 #include <vector>
-
+#include <math.h>
 namespace geometry {
     template <typename T>
     using Vector3 = Eigen::Matrix<T, 3, 1>;
 
-    float EPS = 1e-6;
+    float EPS = 1e-5;
     
-    // namespace functions
+    // namespace function RemoveDuplicates
+    // modifies the passed in argument points
+    // to remove any duplicate points
+    // TODO: Make this faster?
     template <typename T>
     void RemoveDuplicates(std::vector<Vector3<T>>& points) {
         for (int i=points.size() - 1; i>=0; i--) {
             for (int j=0; j<i; j++) {
-                if ( (points[i] - points[j]).norm() < EPS ) {
+                if ( (points[i] - points[j]).norm() < 2 * EPS ) {
                     points.erase(points.begin() + i);
                     break;
                 }
             }
         }
     }
+
+    // Takes the axis component of each point
+    // Sorts them
+    // and places them in the passed in components vector
+    template <typename T>
+    void GetComponents(
+        std::vector<Vector3<T>>& points, 
+        int axis, 
+        std::vector<T>& components) {
+        
+        components.clear();
+        for (auto iter=points.begin(); iter!=points.end(); ++iter) {
+            Vector3<T> point = *iter;
+            components.push_back(point(axis));
+        }
+    }
+
 
     // the plane is represented by (x - _p) /dot _normal = 0
     template <typename T>
@@ -78,13 +98,13 @@ namespace geometry {
             Vector3<T> l = _vertices[1] - _vertices[0];
             
             // if line and plane are parallel, then no intersections
-            if ( abs(l.dot(n)) < EPS) {
+            if ( abs(l.dot(n)) < geometry::EPS) {
                 return;
             }
 
             // if intersection does not land on segment, skip
             float d = (p0 - l0).dot(n) / l.dot(n);
-            if (d < -EPS || d > 1+EPS) {
+            if (d < -geometry::EPS || d > 1+geometry::EPS) {
                 return;
             }
 
@@ -94,8 +114,6 @@ namespace geometry {
         }
 
     private:
-        float EPS = 1e-6;
-
         Vector3<T> _vertices[2];
     }; 
 
@@ -118,14 +136,18 @@ namespace geometry {
 
 
         // check sums of areas of 3 components == area of triangle
-        bool ContainsPoint(Vector3<T>& point) const {
-            Vector3<T> subarea1 = (point - _vertices[0]).cross(point - _vertices[2]);
-            Vector3<T> subarea2 = (point - _vertices[2]).cross(point - _vertices[1]);
-            Vector3<T> subarea3 = (point - _vertices[1]).cross(point - _vertices[0]);
-            Vector3<T> area = (_vertices[2] - _vertices[0]).cross(_vertices[1] - _vertices[0]);
+        bool ContainsPoint(Vector3<T>& point) {
+            if (abs( (point - vertices(0)).dot(_normal) ) > geometry::EPS) {
+                return false;
+            }
+
+            T subarea1 = (point - vertices(0)).cross(point - vertices(2)).norm();
+            T subarea2 = (point - vertices(2)).cross(point - vertices(1)).norm();
+            T subarea3 = (point - vertices(1)).cross(point - vertices(0)).norm();
+            T area = (vertices(2) - vertices(0)).cross(vertices(1) - vertices(0)).norm();
             
-            T diffNorm = ((subarea1 + subarea2 + subarea3) - area).norm();
-            return diffNorm < EPS;
+            T diffNorm = abs((subarea1 + subarea2 + subarea3) - area);
+            return diffNorm < geometry::EPS;
         }
 
         // Assignment 2: implement ray-triangle intersection.
@@ -134,17 +156,15 @@ namespace geometry {
         // to return for the case of no intersections is up to you. You can also change the
         // signature of this function as you see fit.
         // const T IntersectRay(const Vector3<T>& origin, const Vector3<T>& dir) const {
-        void IntersectRay(const Vector3<T>& origin, const Vector3<T>& dir, std::vector<Vector3<T>>& intersections) const {
+        void IntersectRay(const Vector3<T>& origin, const Vector3<T>& dir, std::vector<Vector3<T>>& intersections) {
             /* Assignment 2. */
-            Plane<T> plane(_vertices[0], _normal);
-
             Vector3<T> n = _normal;
             Vector3<T> p0 = _vertices[0];
             Vector3<T> l0 = origin;
             Vector3<T> l = dir;
             
             // if line and plane are parallel, then no intersections
-            if ( abs(l.dot(n)) < EPS) {
+            if ( abs(l.dot(n)) < geometry::EPS) {
                 return;
             }
 
@@ -154,12 +174,12 @@ namespace geometry {
 
             // test to see if poi is on ray
             if (d < 0) {
-                return;
+                // return;  // actually let's just include the intersections behind the origin
             }
 
             // test to see if intersection is contained in the triangle
             if (ContainsPoint(poi)) {
-                intersections.push_back(poi);
+                 intersections.push_back(poi);
             }
         }
         
@@ -187,7 +207,6 @@ namespace geometry {
 
 
     private:
-        float EPS = 1e-6;
         Vector3<T> _vertices[3];
         Vector3<T> _normal;
         T _area;

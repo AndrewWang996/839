@@ -58,48 +58,83 @@ namespace mesh {
             /* Implement your code here. */
             // Fill the _voxels array with the correct flag.
             const int nx = _nvoxel[0], ny = _nvoxel[1], nz = _nvoxel[2];
-            
-            std::vector<Vector3<T>> intersections;
+ 
             for (int i = 0; i < nx; ++i) {
                 printf("Doing x voxel #%i out of %i\n", i, nx);
                 for (int j = 0; j < ny; ++j) {
-                    printf("Doing y voxel #%i out of %i\n", j, nx);
-                    for (int k = 0; k < nz; ++k) {
-                        printf("Doing z voxel #%i out of %i\n", k, nx);
-                        intersections.clear();
+                    int k = 0;
 
-                        // Determine voxel center
-                        Vector3<T> center(
-                            _pmin[0] + _dx * (i + 0.5),
-                            _pmin[1] + _dx * (j + 0.5),
-                            _pmin[2] + _dx * (k + 0.5)
+                    // Determine voxel center
+                    Vector3<T> center(
+                        _pmin[0] + _dx * (i + 0.5),
+                        _pmin[1] + _dx * (j + 0.5),
+                        _pmin[2] + _dx * 0.5                  // it SHOULD be okay if it's slightly lower
+                    );
+
+                    // Specify direction of ray
+                    Vector3<T> dir(0,0,1);
+
+                    // Send an arbitrary ray outward, intersecting w/ all triangles in mesh
+                    std::vector<Vector3<T>> intersections;
+                    intersections.clear();
+                    for (int ti=0; ti<_triangles.size(); ti++) {
+                        std::vector<Vector3<T>> verts = _triangles[ti];
+
+                        geometry::Triangle<T> triangle(
+                            verts[0],
+                            verts[1],
+                            verts[2]
                         );
 
-                        // Specify direction of ray
-                        Vector3<T> dir(1,1,1);
-
-                        // Send an arbitrary ray outward, intersecting w/ all triangles in mesh
-                        for (auto iter=_triangles.begin(); iter!=_triangles.end(); ++iter) {
-                            std::vector<Vector3<T>> vertices = *iter;
-                            geometry::Triangle<T> triangle(
-                                vertices[0],
-                                vertices[1],
-                                vertices[2]
-                            );
-
-                            // gather intersections of ray with triangles in mesh
-                            triangle.IntersectRay(center, dir, intersections);
-                        }
-                        
-                        // Remove duplicate intersections to account for strange cases
-                        // where intersections lie inbetween multiple triangles.
-                        geometry::RemoveDuplicates<T>(intersections);                        
-
-                        // voxel is filled iff number of intersections is odd
-                        _voxels[i][j][k] = (intersections.size() % 2 == 1);
+                        // gather intersections of ray with triangles in mesh
+                        triangle.IntersectRay(center, dir, intersections);
                     }
+                   
+                    // set the corresponding voxels for these Z-axis aligned
+                    // intersection points 
+                    SetZVoxels(i, j, intersections);
                 }
             }
+        }
+
+        void SetZVoxels(int i, int j, std::vector<Vector3<T>>& intersections) {
+             // Remove duplicate intersections to account for strange cases
+             // where intersections lie inbetween multiple triangles.
+             geometry::RemoveDuplicates<T>(intersections);
+ 
+             // Place z-coordinates into a new vector heights
+             // Then sort them.
+             std::vector<T> heights;
+             geometry::GetComponents<T>(intersections, 2, heights);
+             std::sort(heights.begin(), heights.end()); 
+
+             if (intersections.size() % 2 == 1) {
+                 printf("Num intersections is %lu. This is ODD!\n", intersections.size());
+             }                      
+
+             // Loop over list of intersections, only processing regions
+             // where voxels should be set.
+             for (int ind = 1; ind < heights.size(); ind += 2) {
+                 int lo = ceil( (heights[ind-1] - _pmin[2]) / _dx );
+                 int hi = floor( (heights[ind] - _pmin[2]) / _dx );
+
+                 for (int zInd=lo; zInd<=hi; zInd++) {
+                     _voxels[i][j][zInd] = true;
+                 } 
+             }
+        }
+
+
+        void GetTriangleBounds(
+            geometry::Triangle<T>& triangle, 
+            Vector3<T>& tmin, 
+            Vector3<T>& tmax) {
+
+            for (int i=0; i<3; i++) {
+                Vector3<T> v = triangle.vertices(i);
+                tmin = tmin.cwiseMin(v);
+                tmax = tmax.cwiseMax(v);
+            } 
         }
 
         void AdvancedVoxelization() {
@@ -107,10 +142,65 @@ namespace mesh {
             /* Implement your code here. */
             // Fill the _voxels array with the correct flag.
             const int nx = _nvoxel[0], ny = _nvoxel[1], nz = _nvoxel[2];
-            for (int i = 0; i < nx; ++i)
-                for (int j = 0; j < ny; ++j)
-                    for (int k = 0; k < nz; ++k)
-                        _voxels[i][j][k] = false;
+            
+            // Store a list of intersection points for each grid location
+            // on the xy-plane
+            std::vector<std::vector<std::vector<Vector3<T>>>> intersections;
+            for (int i = 0; i < nx; ++i) {
+                std::vector<std::vector<Vector3<T>>> emptyX;
+                for (int j = 0; j < ny; ++j) {
+                    std::vector<Vector3<T>> emptyY;
+                    emptyX.push_back(emptyY);
+                }
+                intersections.push_back(emptyX);
+            }
+            
+
+            float inc = 0.1;
+
+            // loop over every triangle
+            for (int ti=0; ti<_triangles.size(); ti++) {
+                if ((float)ti / _triangles.size() > inc) {
+                    printf("%i/%lu\n", ti, _triangles.size());
+                    inc += 0.1;
+                }
+                std::vector<Vector3<T>> verts = _triangles[ti];
+                geometry::Triangle<T> triangle(verts[0], verts[1], verts[2]);
+
+                // Get bounds of triangle to easily project it onto any
+                // axis plane (eg. xy-plane)
+                Vector3<T> tmin, tmax;
+                GetTriangleBounds(triangle, tmin, tmax);
+
+                int xmin = (int)floor( (tmin[0] - _pmin[0]) / _dx - 0.5);
+                int xmax = (int)ceil( (tmax[0] - _pmin[0]) / _dx + 0.5);
+                int ymin = (int)floor( (tmin[1] - _pmin[1]) / _dx - 0.5);
+                int ymax = (int)ceil( (tmax[1] - _pmin[1]) / _dx + 0.5);
+
+                for (int i = xmin; i <= xmax; ++i) {
+                    for (int j = ymin; j <= ymax; ++j) {
+                        // Determine voxel center
+                        Vector3<T> center(
+                            _pmin[0] + _dx * (i + 0.5),
+                            _pmin[1] + _dx * (j + 0.5),
+                            _pmin[2] + _dx * 0.5                  // it SHOULD be okay if it's slightly lower
+                        );
+
+                        // Specify direction of ray
+                        Vector3<T> dir(0,0,1);
+
+                        // intersect triangle with ray
+                        triangle.IntersectRay(center, dir, intersections[i][j]);
+                    }
+                }
+            }
+
+            // set the voxels for each xy grid location
+            for (int i = 0; i < nx; ++i) {
+                for (int j = 0; j < ny; ++j) {
+                    SetZVoxels(i, j, intersections[i][j]);    
+                }
+            }
         }
 
         void AdvancedVoxelizationWithApproximation() {
