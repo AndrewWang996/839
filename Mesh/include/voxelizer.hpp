@@ -16,6 +16,12 @@ namespace mesh {
     template <typename T>
     using Matrix3 = Eigen::Matrix<T, 3, 3>;
 
+    /**
+        This class is used to store counts in each voxel, which
+        is helpful for voxelizing non-watertight meshes. After storing
+        counts, you may call FilterThreshold() to convert to the
+        standard boolean voxelization.
+    */
     template<typename T>
     class VoxelPainter {
     public:
@@ -72,7 +78,14 @@ namespace mesh {
     };
 
 
-
+    /**
+            This class is used for voxelization with non-axis aligned
+        rays. That is why the constructor takes in a vector z.
+        
+            Note: When we refer to x'y'z' space, we are using the 
+        non-axis aligned rays. When we refer to xyz space we are 
+        referring to standard, not transformed space.
+    */
     template<typename T>
     class RotatedProjector {
     public:
