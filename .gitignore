@@ -5,6 +5,7 @@
 *.pdf
 dataBackup/*
 data/*
+build/*
 
 # User-specific files
 *.suo
