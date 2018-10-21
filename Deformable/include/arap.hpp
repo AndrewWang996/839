@@ -141,8 +141,8 @@ void cotmatrix(
  * @param F (mx3) input faces
  * @param C (nxn) input cotangent weight matrix
  * @param d (1)		input dimension (0, 1, or 2) corresponding to (x, y or z)
- * @param fromRow input starting entry row offset
- * @param fromCol input starting entry column offset
+ * @param fromRow input starting entry row offset           // what the hell is this ??
+ * @param fromCol input starting entry column offset        // and this ????
  * @param entries output list of triplets to which new entries are appended
  * @param loop		input whether to use the loop implementation from IGL (slower)
  */
@@ -167,10 +167,24 @@ void arap_linear_block(
 	entries.reserve(entries.size() + 7 * n);
 
 	// for all faces
-	for(int i = 0; i < m; ++i){
+	for(int faceIdx = 0; faceIdx < m; ++faceIdx) {
 		// for each half-edge
-		for(int e = 0; e < 3; ++e){
-			//TODO: fill in entries here.
+		for(int e = 0; e < 3; ++e) {
+			// TODO: fill in entries here.
+            int i = F(faceIdx, edges(e, 0));
+            int j = F(faceIdx, edges(e, 1));
+            int k = F(faceIdx, 3 - edges(e, 0) - edges(e, 2));
+            const auto &v1 = V(i, d);       // yea we're actually taking the x/y/z component here...
+            const auto &v2 = V(j, d);
+            const auto &delta = (v1 - v2);
+            const auto &cotVal = C(i, j);   // TODO: Check this ...
+            float coeff = 1.0 / 3.0;
+            entries.push_back(Entry(fromRow + i, fromCol + j, coeff * cotVal * delta));  // (src, trg, val)
+            entries.push_back(Entry(fromRow + j, fromCol + i, coeff * -cotVal * delta)); // (trg, src, -val)
+            entries.push_back(Entry(fromRow + i, fromCol + i, coeff * cotVal * delta));  // (src, src, val)
+            entries.push_back(Entry(fromRow + j, fromCol + j, coeff * -cotVal * delta)); // (trg, trg, -val)
+            entries.push_back(Entry(fromRow + i, fromCol + k, coeff * cotVal * delta));  // (src, oth, val)
+            entries.push_back(Entry(fromRow + j, fromCol + k, coeff * -cotVal * delta)); // (trg, oth, -val)
 		}
 	}
 }
