@@ -139,10 +139,10 @@ void cotmatrix(
  *
  * @param V (nx3) input vertices
  * @param F (mx3) input faces
- * @param C (nxn) input cotangent weight matrix
+ * @param C (nxn) input cotangent weight matrix     // According to Piazza, actually (mx3)
  * @param d (1)		input dimension (0, 1, or 2) corresponding to (x, y or z)
- * @param fromRow input starting entry row offset           // what the hell is this ??
- * @param fromCol input starting entry column offset        // and this ????
+ * @param fromRow input starting entry row offset           
+ * @param fromCol input starting entry column offset        
  * @param entries output list of triplets to which new entries are appended
  * @param loop		input whether to use the loop implementation from IGL (slower)
  */
@@ -177,7 +177,7 @@ void arap_linear_block(
             const auto &v1 = V(i, d);       // yea we're actually taking the x/y/z component here...
             const auto &v2 = V(j, d);
             const auto &delta = (v1 - v2);
-            const auto &cotVal = C(i, j);   // TODO: Check this ...
+            const auto &cotVal = C(faceIdx, e);   
             float coeff = 1.0 / 3.0;
             entries.push_back(Entry(fromRow + i, fromCol + j, coeff * cotVal * delta));  // (src, trg, val)
             entries.push_back(Entry(fromRow + j, fromCol + i, coeff * -cotVal * delta)); // (trg, src, -val)
@@ -236,9 +236,24 @@ void arap_precompute(
 	SparseMatrix<Scalar> L;
 	cotmatrix(V, F, C, L);
 
+
 	// compute K = [Kx, Ky, Kz]
 	std::vector<Triplet<Scalar> > entries;
 	//TODO: Compute K (Hint: Use igl::min_quad_with_fixed_precompute)
+    
+    // compute data (part of precomputation step)
+    // Note: Aeq is empty because there are no non-trivial equality constraints
+    igl::min_quad_with_fixed_precompute(L, b, Eigen::SparseMatrix<Scalar>(), true, data);
+
+    // loop over every x,y,z using d (short for dimension?)
+    for (int d=0; d<3; d++) {
+        arap_linear_block(V, F, C, d, 0, d * n, entries, false);
+    }
+    
+    // Do I need to set K's size to nx3n before this?
+    // okay, well let's just do it since it seems standard
+    K.resize(n, 3*n);
+    K.setFromTriplets(entries.begin(), entries.end());
 }
 
 /**
@@ -280,8 +295,12 @@ void solve_rotations(
 	assert(nr * dim == C.cols() && "Dimension of C must use multiple of dimension");
 
 	R.resize(3 * nr, 3);
-	// for each rotation
 	//TODO: compute R
+    
+	// for each rotation
+    for (int i=0; i<nr; i++) {
+        
+    }
 }
 
 
