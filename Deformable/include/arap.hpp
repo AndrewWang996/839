@@ -117,19 +117,18 @@ void cotmatrix(
 
 	//TODO: Fill in entries
     // Loop over all faces (should I be doing parallel for?)
-	// for (int i=0; i<m; i++) {
-	igl::parallel_for( m, [&V, &F, &C](const int faceIdx) {
+	for (int faceIdx=0; faceIdx<m; faceIdx++) {
         // Loop over all edges
 	    for (int ei=0; ei<3; ei++) {
             int i = F(faceIdx, edges(ei, 0));
             int j = F(faceIdx, edges(ei, 1));
-            const auto& cotVal = C(i, j);
+            const auto& cotVal = C(faceIdx, ei);
             entries.push_back(Entry(i, i, cotVal));
             entries.push_back(Entry(j, j, cotVal));
             entries.push_back(Entry(i, j, -cotVal));
             entries.push_back(Entry(j, i, -cotVal));
         }	
-	}	
+	}
  
 	L.setFromTriplets(entries.begin(), entries.end());
 }
@@ -173,7 +172,7 @@ void arap_linear_block(
 			// TODO: fill in entries here.
             int i = F(faceIdx, edges(e, 0));
             int j = F(faceIdx, edges(e, 1));
-            int k = F(faceIdx, 3 - edges(e, 0) - edges(e, 2));
+            int k = F(faceIdx, 3 - edges(e, 0) - edges(e, 1));
             const auto &v1 = V(i, d);       // yea we're actually taking the x/y/z component here...
             const auto &v2 = V(j, d);
             const auto &delta = (v1 - v2);
@@ -299,7 +298,22 @@ void solve_rotations(
     
 	// for each rotation
     for (int i=0; i<nr; i++) {
+        Mat3 Ci;
+        Mat3 Rit; 
+        for (int d=0; d<3; d++) {
+            // Recall C is 3x3n
+            Ci.col(d) = C.col(d*nr + i);            
+        }
+        // divide by max coefficient for numerical stability
+        Ci = Ci / Ci.maxCoeff();
+    
+        // SVD
+        igl::polar_svd3x3(Ci, Rit);
         
+        for (int d=0; d<3; d++) {
+            // Recall R is 3nx3
+            R.row(d*nr + i) = Rit.col(d);
+        }
     }
 }
 
@@ -332,11 +346,14 @@ void arap_single_iteration(
 	// local solve: fix vertices, find rotations
 local: {
 		//TODO local solve.  Hint: use solve_rotations here
+        Matrix<Scalar, Dynamic, Dynamic> C = U.transpose() * K;
+        solve_rotations(C, R);
 	}
 
 	// global solve: fix rotations, find vertices
 global: {
 		typedef Matrix<Scalar, Dynamic, 1> Vector;
 		//TODO: global solve.  Hint: use calls to igl::min_quad_with_fixed_solve here.
-		}
+        igl::min_quad_with_fixed_solve(data, -K*R, bc, Vector(), U);
+	}
 }
