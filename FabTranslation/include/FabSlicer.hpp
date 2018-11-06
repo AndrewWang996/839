@@ -4,6 +4,8 @@
 #include "IntervalTree.hpp"
 #include "cinolib/meshes/meshes.h"
 #include <ctime>
+#include <math.h>
+#include <algorithm>
 
 namespace fab_translation {
     template <typename T>
@@ -78,6 +80,13 @@ namespace fab_translation {
             _infill_y_upper_bound += _infill_dx * 0.5;
         }
 
+        /* Main entrance for FabSlicer
+            return contour and infill_edges, which can be directed sent to corresponding 
+                visualization function to visualize in MeshLab
+            1. each contour contains a list of point in loop order, each layer can have 
+                multiple contours, so the contour is vector<vector<vector<Point>>>.
+            2. infill edges is a edge soup for each layer, thus it's vector<vector<Edge>>
+        */
         void RunTranslation(std::vector<std::vector<std::vector<Vector3<T>>>>& contour,
             std::vector<std::vector<std::pair<Vector3<T>, Vector3<T>>>>& infill_edges) {
             std::vector<std::vector<fab_translation::IntersectionEdge<T>>> intersection_edges;
@@ -145,6 +154,7 @@ namespace fab_translation {
                 intersection_edges.push_back(intersections_one_plane);
             }
         }
+
 
         void Slicing_accelerated(mesh::TriMesh<T>& tri_mesh,
             std::vector<std::vector<IntersectionEdge<T>>> &intersection_edges) {
@@ -269,6 +279,11 @@ namespace fab_translation {
             }
         }
 
+
+        /* Generate infill pattern
+           Goal: Given the contours at each layer, this function aims to infill the internal part by a pattern which
+                 can be procedurally built. (e.g. grid, honey comb, Fermat spiral) 
+           The code is for grid pattern, you can rewrite the whole function based on your need. */
         void Infill(std::vector<std::vector<std::vector<Vector3<T>>>>& contours,
             std::vector<std::vector<std::pair<Vector3<T>, Vector3<T>>>>& infill_edges) {
             
@@ -349,6 +364,10 @@ namespace fab_translation {
             }
         }  
 
+        /* Point cloud visualization for each layer's slicing
+            file_name: output .ply filename (should be with .ply extension) 
+            point_density: the smaller, the denser 
+            intersection_edges: edge soup for each layer's slicing */
         void VisualizeSlicing(std::string file_name, 
             T point_density,
             std::vector<std::vector<IntersectionEdge<T>>> intersection_edges) {
@@ -440,6 +459,9 @@ namespace fab_translation {
             fclose(fp);
         }
     private:
+
+        float EPS = 1e-6;
+
         mesh::TriMesh<T> _tri_mesh;
 
         /* Variables for slicing */
@@ -454,3 +476,16 @@ namespace fab_translation {
         data_structure::IntervalTree<T> _interval_tree;
     };
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
