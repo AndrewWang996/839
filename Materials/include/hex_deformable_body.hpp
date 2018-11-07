@@ -36,7 +36,7 @@ namespace materials {
 
 
         //TODO: Students should fill this out
-	//vertices is a matrix of the current vertex positions (3 x n)        
+	    //vertices is a matrix of the current vertex positions (3 x n)        
         const Eigen::SparseMatrix<T> ComputeStiffnessMatrix(
                 const Matrix3X<T>& vertices) const{
             std::vector<Eigen::Triplet<T>> triplet_list;
@@ -147,7 +147,30 @@ namespace materials {
         static const Eigen::Matrix<T, 8, 8> GaussIntegrationFactor() {
             // \int_{-1}^{1} f(x) dx \approx f(-1/sqrt(3)) + f(1/sqrt(3)).
             Eigen::Matrix<T, 8, 8> X0_coeff = Eigen::MatrixXd::Zero(8, 8);
-            
+           
+            // See Equation 11.2 from supplemental reading
+            const T pos = 1 + 1 / std::sqrt(3);
+            const T neg = 1 - 1 / std::sqrt(3);
+
+            // N_{4(i-1)+2(j)+k} = (1+s*(-1)^i)(1+s*(-1)^j)(1+s*(-1)^k)
+            const T N[8] = {
+                neg*neg*neg/8,
+                neg*neg*pos/8,
+                neg*pos*neg/8,
+                neg*pos*pos/8,
+                pos*neg*neg/8,
+                pos*neg*pos/8,
+                pos*pos*neg/8,
+                pos*pos*pos/8
+            };
+
+            // follow rules for 2-point quadrature
+            // bitwise operations can be used for simplicity
+            for (int i=0; i<8; i++) {
+                for (int j=0; j<8; j++) {
+                    X0_coeff(i,j) = N[i^j];
+                }
+            }
             return X0_coeff;
         }
 
