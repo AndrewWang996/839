@@ -100,10 +100,48 @@ int main(int argc, char *argv[])
     materials::HexDeformableBody<double> hex_def_body(linear_elasticity_material, hex_mesh.vertex(), 0.4, hex_mesh);
 
     //TODO: Students take it from here!
+   
+    // external force
+    Eigen::VectorXd externalF(3 * num_vertices);
+    externalF.setZero();
+    for (int y=0; y < num_y_vertices; y++) {
+        int ind = 3 * (num_y_vertices * (num_x_vertices - 1) + y) * num_z_vertices + 2;
+        externalF(ind) = 99;    // maybe pass in as a paramter?
+    }
+
+    // get stiffness matrix
+    Eigen::SparseMatrix<double> K = hex_def_body.ComputeStiffnessMatrix(hex_mesh.vertex());
     
+    // Solve for deformation U
+    int num_vertices_fr = num_vertices - num_y_vertices * num_z_vertices;
+    Eigen::ConjugateGradient<Eigen::SparseMatrix<double>, Eigen::Upper|Eigen::Lower> cg;
+    cg.compute(
+        K.bottomRightCorner(
+            3*num_vertices_fr, 
+            3*num_vertices_fr
+        )
+    );
+    Eigen::VectorXd U(3 * num_vertices);
+    U.setZero();
+    U.tail(3*num_vertices_fr) = cg.solve(
+        externalF.tail(3*num_vertices_fr)
+    );
+
+    std::cout << "num vertices: " << num_vertices << std::endl;
+    
+    // write deformed mesh
+    Eigen::Matrix<double, 3, Eigen::Dynamic> new_vertices = hex_mesh.vertex() 
+        + Eigen::Map<Eigen::MatrixXd>(U.data(), 3, num_vertices); 
+    write_voxel_grid("deformed_test.stl", new_vertices, hex_mesh.element());
+    
+
+ 
     std::cout << "Done with OpenFab!  Have a squishy day." << std::endl;
 
 
 
 
 }
+
+
+
