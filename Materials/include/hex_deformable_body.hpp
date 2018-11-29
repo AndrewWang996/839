@@ -7,7 +7,6 @@
 #include "typedefs.hpp"
 
 namespace materials {
-
     template<typename T>
     class HexDeformableBody : public DeformableBody<3, T> {
     public:
@@ -36,18 +35,65 @@ namespace materials {
 
 
         //TODO: Students should fill this out
-	//vertices is a matrix of the current vertex positions (3 x n)        
+	    //vertices is a matrix of the current vertex positions (3 x n)        
         const Eigen::SparseMatrix<T> ComputeStiffnessMatrix(
-                const Matrix3X<T>& vertices) const{
+                const Matrix3X<T>& vertices) const {
+
             std::vector<Eigen::Triplet<T>> triplet_list;
             const int vertex_num = static_cast<int>(this->vertex_position_.size() / 3);
            
             Eigen::SparseMatrix<T> K(vertex_num * 3, vertex_num * 3);
+
+            auto &elements = this->undeformed_mesh_.element();
+            int num_elements = elements.cols();
+            triplet_list.reserve(24 * 24 * num_elements);   // reserve space
+
+            T pos = 0.5 * (1 + 1 / std::sqrt(3));
+            T neg = 0.5 * (1 - 1 / std::sqrt(3));
+            Eigen::Matrix<T,3,8> quad;
+            quad << neg,neg,neg,neg,pos,pos,pos,pos,
+                     neg,neg,pos,pos,neg,neg,pos,pos,
+                     neg,pos,neg,pos,neg,pos,neg,pos;
+
+            Eigen::Matrix<T,3,3> phi;
+            const Material<3,T> &material = this->materials_[0]; // let's just take the first material
+            auto stress_diff = material.StressDifferential(phi);
+
+            // local stiffness
+            Eigen::Matrix<T, 24, 24> local_K;
+            local_K.setZero();
+            for (int i=0; i<8; i++) {
+                auto dFdX = DeformationGradientPartialx(quad.col(i), 1.0 / hex_size_);
+                auto tmp = dFdX.transpose() * stress_diff * dFdX;
+                local_K += (tmp + tmp.transpose()) / 2.0;
+            }
+            local_K *= hex_size_ * hex_size_ * hex_size_ / 8.0;
+
+            // global stiffness by summing local stiffness
+            for (int e_i=0; e_i<num_elements; e_i++) {
+                for (int i=0; i<8; i++) {
+                    for (int j=0; j<8; j++) {
+                        for (int x=0; x<3; x++) {
+                            for (int y=0; y<3; y++) {
+                                Eigen::Triplet<T> entry(
+                                    3 * elements(j,e_i) + y, 
+                                    3 * elements(i,e_i) + x,
+                                    local_K(3*j + y, 3*i + x)
+                                ); 
+                                triplet_list.push_back(entry);
+                            }
+                        }
+                    }
+                }
+            }
+            
             K.setFromTriplets(triplet_list.begin(), triplet_list.end());
+
             // Make sure K is symmetric.
             K = (K + Eigen::SparseMatrix<T>(K.transpose())) / 2.0;
             return K;
         }
+
 
         //return dphi (the deformation gradient) for a given voxel:
         //undeformed_vertex is a point in material space.
@@ -84,8 +130,39 @@ namespace materials {
             return F;
         }
 
+        static const Eigen::Matrix<T, 9, 24> DeformationGradientPartialx(
+                const Vector3<T> &r,
+                const T inv_dx) {
+            
+            const T x_factor[2] = { 1 - r(0), r(0) };
+            const T y_factor[2] = { 1 - r(1), r(1) };
+            const T z_factor[2] = { 1 - r(2), r(2) };
 
+            Eigen::Matrix<T,3,8> coeff;
+            for (int i=0; i<=1; i++) {
+                for (int j=0; j<=1; j++) {
+                    for (int k=0; k<=1; k++) {
+                        int ind = 4*i + 2*j + k;
+                        coeff(0, ind) = (i == 0 ? -inv_dx : inv_dx) * y_factor[j] * z_factor[k];
+                        coeff(1, ind) = x_factor[i] * (j == 0 ? -inv_dx : inv_dx) * z_factor[k];
+                        coeff(2, ind) = x_factor[i] * y_factor[j] * (k == 0 ? -inv_dx : inv_dx);
+                    }
+                }
+            }
 
+            Eigen::Matrix<T,9,24> Jacobian;
+            Jacobian.setZero();
+            for (int i=0; i<8; i++) {
+                for (int j=0; j<3; j++) {
+                    for (int k=0; k<3; k++) {
+                        Jacobian(j*3 + k, i*3 + k) = coeff(j,i);
+                    }
+                }
+            }
+            
+            return Jacobian;
+        }
+        
 
         //return dphi/dx for a given voxel:
         //undeformed_vertex is a point in material space.
@@ -147,7 +224,30 @@ namespace materials {
         static const Eigen::Matrix<T, 8, 8> GaussIntegrationFactor() {
             // \int_{-1}^{1} f(x) dx \approx f(-1/sqrt(3)) + f(1/sqrt(3)).
             Eigen::Matrix<T, 8, 8> X0_coeff = Eigen::MatrixXd::Zero(8, 8);
-            
+           
+            // See Equation 11.2 from supplemental reading
+            const T pos = 1 + 1 / std::sqrt(3);
+            const T neg = 1 - 1 / std::sqrt(3);
+
+            // N_{4(i-1)+2(j)+k} = (1+s*(-1)^i)(1+s*(-1)^j)(1+s*(-1)^k)
+            const T N[8] = {
+                neg*neg*neg/8,
+                neg*neg*pos/8,
+                neg*pos*neg/8,
+                neg*pos*pos/8,
+                pos*neg*neg/8,
+                pos*neg*pos/8,
+                pos*pos*neg/8,
+                pos*pos*pos/8
+            };
+
+            // follow rules for 2-point quadrature
+            // bitwise operations can be used for simplicity
+            for (int i=0; i<8; i++) {
+                for (int j=0; j<8; j++) {
+                    X0_coeff(i,j) = N[i^j];
+                }
+            }
             return X0_coeff;
         }
 

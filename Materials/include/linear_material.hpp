@@ -48,14 +48,43 @@ namespace materials {
 
         };
 
-         //TODO: Students fill this out (and change the return value)
-         //F is the deformation gradient.
+        //TODO: Students fill this out (and change the return value)
+        // F is the deformation gradient.
+        /*
+            - Number all elements of F (3x3 matrix) from 1-9 in the following way:
+                [1 2 3]
+                [4 5 6]
+                [7 8 9]
+            - Rewrite it in vector form [1 2 3 4 5 6 7 8 9]^T
+            - Take derivative of P tensor accordingly. 
+        */
         const typename Material<dim, T>::MatrixDim2T StressDifferential(
                 const typename Material<dim, T>::MatrixDimT& F) const {
 
-            const typename Material<dim, T>::MatrixDim2T zero = Material<dim, T>::MatrixDim2T::Zero();
-            return zero;
+            const T mu = Material<dim, T>::mu();
+            const T lambda = Material<dim, T>::lambda();
+            const typename Material<dim, T>::MatrixDim2T I2 = Material<dim, T>::MatrixDim2T::Identity();
+            
+            // d/dF(mu*F)
+            typename Material<dim, T>::MatrixDim2T stressDiff = mu * I2;
 
+            // d/dF(mu*F^T)
+            int pos = 0;
+            for (int c=0; c<dim; c++) {
+                for (int r=0; r<dim; r++) {
+                    stressDiff(r*dim + c, pos) += mu;
+                    pos++;
+                }
+            }
+            
+            // d/dF(lambda*Tr(F)*I)
+            for (int r=0; r<dim; r++) {
+                for (int c=0; c<dim; c++) {
+                    stressDiff(r * (dim+1), c * (dim+1)) += lambda;
+                }
+            }
+
+            return stressDiff;
         }
 
     private:
