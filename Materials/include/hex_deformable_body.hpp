@@ -5,6 +5,7 @@
 #include "deformable_body.hpp"
 #include "hexahedral_mesh.hpp"
 #include "typedefs.hpp"
+#include <stdio.h>
 
 namespace materials {
     template<typename T>
@@ -86,9 +87,8 @@ namespace materials {
                     }
                 }
             }
-            
+           
             K.setFromTriplets(triplet_list.begin(), triplet_list.end());
-
             // Make sure K is symmetric.
             K = (K + Eigen::SparseMatrix<T>(K.transpose())) / 2.0;
             return K;
@@ -211,6 +211,80 @@ namespace materials {
 
 
         }
+
+        /*
+            Permutation matrix to deal with arbitrary fixed vertices
+        */
+        Eigen::PermutationMatrix<Eigen::Dynamic> GetPermutation(const std::vector<int> &fixed) {
+            int n_vert = this->undeformed_mesh_.NumOfVertex();
+            std::vector<bool> ff(n_vert, false);
+            for (int vi : fixed) {
+                ff[vi] = true;
+            }
+            
+
+            Eigen::VectorXi P_indices(3 * n_vert);
+            int P_ii = 0;
+            for (int i=0; i<n_vert; i++) {
+                if (ff[i]) {
+                    Eigen::Vector3i ind(3*i, 3*i+1, 3*i+2);
+                    P_indices.segment<3>(P_ii) = ind;
+                    P_ii += 3;
+                }
+            }
+            for (int i=0; i<n_vert; i++) {
+                if ( ! ff[i] ) {
+                    Eigen::Vector3i ind(3*i, 3*i+1, 3*i+2);
+                    P_indices.segment<3>(P_ii) = ind;
+                    P_ii += 3;
+                }
+            }
+
+            Eigen::PermutationMatrix<Eigen::Dynamic> P(P_indices);
+            return P;
+        }
+
+        typedef Eigen::Matrix<T, Eigen::Dynamic, 1> VectorXT;
+
+        /*
+            Get U given indices of fixed vertices + external forces
+        */
+        VectorXT GetDeformation(
+                const std::vector<int> &fixed, 
+                const VectorXT &F) {
+
+            int n_vert = this->undeformed_mesh_.NumOfVertex();
+            int n_fixed = fixed.size();
+            int n_free = n_vert - n_fixed;
+           
+            Eigen::PermutationMatrix<Eigen::Dynamic> P = GetPermutation(fixed);
+
+            const Eigen::SparseMatrix<T> K = ComputeStiffnessMatrix(
+                this->undeformed_mesh_.vertex()
+            );
+
+            Eigen::SparseMatrix<T> K_P(3*n_vert, 3*n_vert);
+            K_P = K.twistedBy(P.transpose()); // P^-1 K P
+
+            Eigen::ConjugateGradient<Eigen::SparseMatrix<T>, Eigen::Upper|Eigen::Lower> cg;
+            cg.compute(
+                K_P.bottomRightCorner(
+                    3*n_free,
+                    3*n_free
+                )
+            );
+
+            VectorXT U(3*n_vert);
+            U.setZero();
+            U.tail(3*n_free) = cg.solve(
+                (P.transpose() * F).tail(
+                    3*n_free
+                )
+            );
+
+            return P * U;
+        }
+
 
         virtual void getInitialNodes(Matrix3X<T>& initial_nodes){
             initial_nodes = this->undeformed_mesh_.vertex();

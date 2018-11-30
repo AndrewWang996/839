@@ -79,6 +79,61 @@ void SolvePerformance(std::string stl_name, double& compliance, double& num_voxe
     double dx = 0.25;
 
     // Your code starts here!!
+    
+    // Convert stl to hex_mesh
+    mesh::Voxelizer<double> voxelizer(stl_name, dx);
+    voxelizer.AdvancedVoxelization();
+    materials::HexahedralMesh<double> hex_mesh = voxelizer.ConvertToHexMesh();
+
+
+    materials::HexDeformableBody<double> hex_def_body(
+        linear_elasticity_material,
+        hex_mesh.vertex(),
+        dx,
+        hex_mesh
+    );
+
+    // Get left, right, top, bottom, etc surfaces
+    auto vertices = hex_mesh.vertex();
+    int nV = vertices.cols();
+    Eigen::Vector3d pmin = vertices.col(0);
+    Eigen::Vector3d pmax = vertices.col(0);
+    for (int i=0; i<nV; i++) {
+        pmin = pmin.cwiseMin(vertices.col(i));
+        pmax = pmax.cwiseMax(vertices.col(i));
+    }
+
+    // Fixed indices (corresponding to left + right surfaces)
+    std::vector<int> fixed;
+    double xmin = pmin(0);
+    double xmax = pmax(0);
+    for (int i=0; i<nV; i++) {
+        if (vertices(0,i) == xmin || vertices(0,i) == xmax) {   // probably need float checking
+            fixed.push_back(i);
+        }
+    }
+
+    // External force
+    Eigen::VectorXd F(3 * nV);
+    F.setZero();
+    double zmax = pmax(2);
+    for (int i=0; i<nV; i++) {
+        if (vertices(2,i) == zmax) {
+            F(3*i + 2) = -5000;
+        }
+    }
+
+    // Solve for compliance
+    auto U = hex_def_body.GetDeformation(fixed, F);
+    compliance = F.dot(U);    
+   
+    //// for debugging 
+    // Eigen::Matrix<double, 3, Eigen::Dynamic> new_vertices = hex_mesh.vertex()
+    //     + Eigen::Map<Eigen::MatrixXd>(U.data(), 3, nV);
+    // write_voxel_grid("test_deformed_bridge.stl", new_vertices, hex_mesh.element());
+
+    // Solve for # voxels
+    num_voxels = hex_mesh.element().cols();
 }
 
 int main(int argc, char *argv[])
@@ -162,43 +217,44 @@ int main(int argc, char *argv[])
 
     // Once you debug the bridge example correct, comment the code before dash line
     // and uncomment the code after dash line to run the test on 121 bridges
-    SolvePerformance(PROJECT_SOURCE_DIR"/data/assignment6/bridge.stl", compliance, num_voxels);
+    // SolvePerformance(PROJECT_SOURCE_DIR"/data/assignment6/bridge.stl", compliance, num_voxels);
+    // printf("compliance: %.3f\nnum_voxels: %.1f\n", compliance, num_voxels);
     // -----------------------------------------------------------------------
-    // std::string base(PROJECT_SOURCE_DIR"/CSG/assn6_meshes/bridge");
-    // int radius_start = 30;
-    // int radius_end   = 40;
-    // int offset_start = -30;
-    // int offset_end   = -20;
+    std::string base(PROJECT_SOURCE_DIR"/CSG/assn6_meshes/bridge");
+    int radius_start = 30;
+    int radius_end   = 40;
+    int offset_start = -30;
+    int offset_end   = -20;
 
-    // std::ofstream file4;
-    // file4.open("q4_result.txt");
-    // file4 << "print Q4 test result" << std::endl << std::endl;
+    std::ofstream file4;
+    file4.open("q4_result.txt");
+    file4 << "print Q4 test result" << std::endl << std::endl;
 
-    // int count = 0;
-    // for (int r = radius_start; r <= radius_end; r++) {
-    //     for (int o = offset_start; o <= offset_end; o++) {
-    //         std::string mesh_name = base + "_r_" + std::to_string(r) + "_o_" + std::to_string(o) + '.stl';
-    //         std::cout << "bridge_r_" + std::to_string(r) + "_o_" + std::to_string(o) << std::endl;
-    //         SolvePerformance(mesh_name, compliance, num_voxels);
-    //         p4_input.push_back(Eigen::Vector2d(compliance, num_voxels));
-    //         file4 << "bridge_r_" + std::to_string(r) + "_o_" + std::to_string(o) + ".stl" << std::endl;
-    //         file4 << "Compliance: " +  std::to_string(compliance) << std::endl;
-    //         file4 << "Total mass: " + std::to_string(num_voxels) << std::endl << std::endl;
-    //         count++;
-    //     }
-    // }
-    // file4.close();
+    int count = 0;
+    for (int r = radius_start; r <= radius_end; r++) {
+        for (int o = offset_start; o <= offset_end; o++) {
+            std::string mesh_name = base + "_r_" + std::to_string(r) + "_o_" + std::to_string(o) + ".stl";
+            std::cout << "bridge_r_" + std::to_string(r) + "_o_" + std::to_string(o) << std::endl;
+            SolvePerformance(mesh_name, compliance, num_voxels);
+            p4_input.push_back(Eigen::Vector2d(compliance, num_voxels));
+            file4 << "bridge_r_" + std::to_string(r) + "_o_" + std::to_string(o) + ".stl" << std::endl;
+            file4 << "Compliance: " +  std::to_string(compliance) << std::endl;
+            file4 << "Total mass: " + std::to_string(num_voxels) << std::endl << std::endl;
+            count++;
+        }
+    }
+    file4.close();
 
-    // std::vector<Eigen::Vector2d> p4_result = geometry::ParetoFront2D(p4_input);
-    // // print Q4 results
-    // file4.open("q4_pareto_front_result.txt");
-    // file4 << "print Q4 pareto front result" << std::endl;
-    // file4 << "Totol number of points: " << p4_result.size() << std::endl;
-    // for (int i = 0; i < p4_result.size(); i++) {
-    //     file4 << "P" << i << ": " << std::endl;
-    //     file4 << p4_result[i] << std::endl;
-    // }
-    // file4.close();    
+    std::vector<Eigen::Vector2d> p4_result = geometry::ParetoFront2D(p4_input);
+    // print Q4 results
+    file4.open("q4_pareto_front_result.txt");
+    file4 << "print Q4 pareto front result" << std::endl;
+    file4 << "Totol number of points: " << p4_result.size() << std::endl;
+    for (int i = 0; i < p4_result.size(); i++) {
+        file4 << "P" << i << ": " << std::endl;
+        file4 << p4_result[i] << std::endl;
+    }
+    file4.close();    
 
     return 0;
 }

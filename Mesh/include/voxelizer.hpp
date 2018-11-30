@@ -2,6 +2,7 @@
 
 #include "read_stl.hpp"
 #include "BasicGeometry.hpp"
+#include "hexahedral_mesh.hpp"
 #include <math.h>
 #include <algorithm>
 #include <iostream>
@@ -11,6 +12,7 @@
 #include <unordered_set>
 #include <fstream>
 #include <ctime>
+
 
 namespace mesh {
     template <typename T>
@@ -512,6 +514,61 @@ namespace mesh {
             // NUM_RAYS / 2 
             voxelpainter.FilterThreshold(NUM_RAYS/2.0, _voxels);
         }
+
+
+        /*
+            Convert mesh into a hex mesh
+        */
+        materials::HexahedralMesh<T> ConvertToHexMesh() {
+            const int nx = _nvoxel[0], ny = _nvoxel[1], nz = _nvoxel[2];
+
+            // locate elements
+            int e[nx][ny][nz] = {0};
+
+            int num_elements = 0;
+            for (int i = 0; i < nx; ++i)
+                for (int j = 0; j < ny; ++j)
+                    for (int k = 0; k < nz; ++k)
+                        if (_voxels[i][j][k])
+                            e[i][j][k] = ++num_elements;
+            Eigen::MatrixXi element(8, num_elements);
+
+            // vertex array
+            std::vector<Eigen::Vector3d> vertices;
+            vertices.reserve(num_elements * 2);
+
+            const int dx[8] = {0, 0, 0, 0, 1, 1, 1, 1};
+            const int dy[8] = {0, 0, 1, 1, 0, 0, 1, 1};
+            const int dz[8] = {0, 1, 0, 1, 0, 1, 0, 1};
+
+            // fill elements matrix
+            int vi = 0;
+            for (int i = 0; i <= nx; ++i)
+                for (int j = 0; j <= ny; ++j)
+                    for (int k = 0; k <= nz; ++k) {
+                        bool flag = false;
+                        for (int d = 0; d < 8; d++) {
+                            int i1 = i - dx[d], j1 = j - dy[d], k1 = k - dz[d];
+                            if (i1 >= 0 && i1 < nx && j1 >= 0 && j1 < ny && k1 >= 0 && k1 < nz && _voxels[i1][j1][k1]) {
+                                element(d, e[i1][j1][k1] - 1) = vi;
+                                flag = true;
+                            }
+                        }
+                        if (flag) {
+                            vertices.push_back(_pmin + Eigen::Vector3d(i * _dx, j * _dx, k * _dx));
+                            vi++;
+                        }
+                    }
+
+            // create vertex matrix
+            const int num_vertices = vertices.size();
+            Eigen::MatrixXd vertex(3, num_vertices);
+            for (int i = 0; i < num_vertices; ++i)
+                vertex.col(i) = vertices[i];
+
+            return std::move(materials::HexahedralMesh<T>(vertex, element));
+        }
+
 
 
         void WriteVoxelToMesh(const std::string& stl_file_name) const {
