@@ -82,6 +82,35 @@ namespace geometry {
         return stack;
     }
 
+    /**
+        Returns true if p2 covers p1, eg.
+         - for all i, we have p2(i) <= p1(i)
+         - there exists a j such that p2(j) < p1(j)
+    */
+    template <typename T>
+    bool covered(const VectorX<T> p1, const VectorX<T> p2) {
+        // number of dimensions
+        int n = p1.rows();
+
+        // p1 NOT covered by p2 if there exists d
+        // such that p2(d) NOT <= p1(d)
+        for (int d=0; d<n; d++) {
+            if (p2(d) > p1(d)) {
+                return false;
+            }
+        }
+
+        // p1 covered by p2 if previous condition not satisfied
+        // and there exists d such that p2(d) < p1(d)
+        for (int d=0; d<n; d++) {
+            if (p2(d) < p1(d)) {
+                return true;
+            }
+        }
+    
+        return false;
+    }
+
     // Q2: implement brute-force method for Nd Pareto front
     // The input is a vector of Nd points
     // The output should be the Nd points on the Pareto front
@@ -89,7 +118,40 @@ namespace geometry {
     // the reference result
     template <typename T>
     std::vector<VectorX<T>> ParetoFrontNdNaive(const std::vector<VectorX<T>> &points) {
-        return points;
+        std::vector<VectorX<T>> paretoFront;
+
+        for (int i=0; i<points.size(); i++) {
+
+            // check whether covered by another point
+            bool is_covered = false;
+            for (int j=0; j<points.size() && ! is_covered; j++) {
+                if (i == j) { continue; }
+                if (covered(points[i], points[j])) {
+                    is_covered = true;
+                }        
+            }
+
+            // if not, include in result
+            if ( ! is_covered ) {
+                paretoFront.push_back(points[i]);                
+            }
+        }
+
+        // sort vector for comparison with reference result
+        std::sort(
+            paretoFront.begin(), 
+            paretoFront.end(),
+            [pts=paretoFront] (VectorX<T> p1, VectorX<T> p2) {
+                for (int i=0; i<p1.rows(); i++) {
+                    if (p1(i) != p2(i)) {
+                        return p1(i) < p2(i);
+                    }
+                }
+                return true;
+            }
+        );
+
+        return paretoFront;
     }
 
     // Q3: implement nlog(n) method for 2d Pareto front
