@@ -141,7 +141,7 @@ namespace geometry {
         std::sort(
             paretoFront.begin(), 
             paretoFront.end(),
-            [pts=paretoFront] (VectorX<T> p1, VectorX<T> p2) {
+            [] (VectorX<T> p1, VectorX<T> p2) {
                 for (int i=0; i<p1.rows(); i++) {
                     if (p1(i) != p2(i)) {
                         return p1(i) < p2(i);
@@ -161,7 +161,34 @@ namespace geometry {
     // the reference result
     template <typename T>
     std::vector<Vector2<T>> ParetoFront2D(const std::vector<Vector2<T>> &points) {
-        return points;
+        std::vector<Vector2<T>> ps = points;
+        std::vector<Vector2<T>> paretoFront;
+
+        // sort points by x coorinate
+        std::sort(
+            ps.begin(),
+            ps.end(),
+            [] (Vector2<T> p1, Vector2<T> p2) {
+                if (p1(0) == p2(0)) {
+                    // if x coordinates are equal,
+                    // then put point with smaller y coordinate first
+                    return p1(1) < p2(1);
+                }
+                return p1(0) < p2(0); 
+            }
+        );
+
+        // get pareto front
+        paretoFront.push_back(ps[0]);
+        Vector2<T> lastPoint = paretoFront[0];
+        for (int i=1; i<ps.size(); i++) {
+            if (ps[i][1] < lastPoint[1]) {
+                paretoFront.push_back(ps[i]);
+                lastPoint = ps[i];
+            }
+        }
+
+        return paretoFront;
     }
 
     // bonus question: implement nlog(n) method for 3d Pareto front
